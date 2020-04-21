@@ -201,6 +201,5 @@ namespace VstsSyncMigrator.Engine
         {
             return Store.GetWorkItem(workItem.Id, revision);
         }
-
     }
 }

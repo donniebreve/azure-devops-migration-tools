@@ -53,6 +53,7 @@ The global configuration created by the `init` command look like this:
     {
       "ObjectType": "VstsSyncMigrator.Engine.Configuration.Processing.WorkItemMigrationConfig",
       "ReplayRevisions": true,
+      "CollapseRevisions": false,
       "PrefixProjectToNodes": false,
       "UpdateCreatedDate": true,
       "UpdateCreatedBy": true,

@@ -7,7 +7,6 @@ namespace VstsSyncMigrator.Engine.Configuration.Processing
 {
     public class WorkItemMigrationConfig : ITfsProcessingConfig
     {
-        public bool ReplayRevisions { get; set; }
         public bool PrefixProjectToNodes { get; set; }
         public bool UpdateCreatedDate { get; set; }
         public bool UpdateCreatedBy { get; set; }
@@ -34,7 +33,15 @@ namespace VstsSyncMigrator.Engine.Configuration.Processing
         public bool FilterWorkItemsThatAlreadyExistInTarget { get; set; }
         public bool PauseAfterEachWorkItem { get; set; }
         public int AttachmentMazSize { get; set; }
+
+        public bool ReplayRevisions { get; set; }
         public bool CollapseRevisions { get; set; }
+
+        public bool AttachPrettyPrintComments { get; set; }
+        public string CommentAttachmentFormat { get; set; }
+
+        public bool AttachPrettyPrintHistory { get; set; }
+        public string HistoryAttachmentFormat { get; set; }
 
         /// <inheritdoc />
         public bool IsProcessorCompatible(IReadOnlyList<ITfsProcessingConfig> otherProcessors)
@@ -51,6 +58,7 @@ namespace VstsSyncMigrator.Engine.Configuration.Processing
             WorkItemCreateRetryLimit = 5;
             FilterWorkItemsThatAlreadyExistInTarget = true;
             ReplayRevisions = true;
+            CollapseRevisions = false;
             LinkMigration = true;
             AttachmentMigration = true;
             FixHtmlAttachmentLinks = false;
@@ -62,6 +70,10 @@ namespace VstsSyncMigrator.Engine.Configuration.Processing
             UpdateSourceReflectedId = false;
             QueryBit = @"AND  [Microsoft.VSTS.Common.ClosedDate] = '' AND [System.WorkItemType] NOT IN ('Test Suite', 'Test Plan')";
             OrderBit = "[System.ChangedDate] desc";
+            AttachPrettyPrintComments = false;
+            CommentAttachmentFormat = "json";
+            AttachPrettyPrintHistory = false;
+            HistoryAttachmentFormat = "json";
         }
     }
 }

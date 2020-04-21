@@ -138,8 +138,6 @@ namespace VstsSyncMigrator.Engine
             Console.WriteLine(@"DONE in {0:%h} hours {0:%m} minutes {0:s\:fff} seconds", stopwatch.Elapsed);
         }
 
-
-
         private IDictionary<string, double> processWorkItemMetrics = null;
         private IDictionary<string, string> processWorkItemParamiters = null;
 
@@ -160,10 +158,7 @@ namespace VstsSyncMigrator.Engine
             {
                 var targetWorkItem = targetStore.FindReflectedWorkItem(sourceWorkItem, false);
                 TraceWriteLine(sourceWorkItem);
-                ///////////////////////////////////////////////
                 TraceWriteLine(sourceWorkItem, $"Work Item has {sourceWorkItem.Rev} revisions and revision migration is set to {_config.ReplayRevisions}");
-
-
 
                 List<RevisionItem> revisionsToMigrate = RevisionsToMigrate(sourceWorkItem, targetWorkItem);
                 if (targetWorkItem == null)
@@ -183,20 +178,18 @@ namespace VstsSyncMigrator.Engine
                     else
                     {
                         TraceWriteLine(sourceWorkItem, $"Syncing as there are {revisionsToMigrate.Count} revisons detected", ConsoleColor.Yellow);
-
                         targetWorkItem = ReplayRevisions(revisionsToMigrate, sourceWorkItem, targetWorkItem, destProject, sourceStore, _current, targetStore);
-
                         AddMetric("Revisions", processWorkItemMetrics, revisionsToMigrate.Count);
                         AddMetric("SyncRev", processWorkItemMetrics, revisionsToMigrate.Count);
                     }
-
-
                 }
                 AddParameter("TargetWorkItem", processWorkItemParamiters, targetWorkItem.Revisions.Count.ToString());
-                ///////////////////////////////////////////////
+                
                 ProcessHTMLFieldAttachements(targetWorkItem);
-                ///////////////////////////////////////////////
-                ///////////////////////////////////////////////////////
+
+                AttachComments(sourceWorkItem, targetWorkItem);
+                AttachHistory(sourceWorkItem, targetWorkItem);
+
                 if (targetWorkItem != null && targetWorkItem.IsDirty)
                 {
                     SaveWorkItem(targetWorkItem);
@@ -209,7 +202,6 @@ namespace VstsSyncMigrator.Engine
                 {
                     sourceWorkItem.Close();
                 }
-
             }
             catch (WebException ex)
             {
@@ -241,7 +233,6 @@ namespace VstsSyncMigrator.Engine
             _elapsedms += witstopwatch.ElapsedMilliseconds;
             processWorkItemMetrics.Add("ElapsedTimeMS", _elapsedms);
 
-
             var average = new TimeSpan(0, 0, 0, 0, (int)(_elapsedms / _current));
             var remaining = new TimeSpan(0, 0, 0, 0, (int)(average.TotalMilliseconds * _count));
             TraceWriteLine(sourceWorkItem,
@@ -257,22 +248,19 @@ namespace VstsSyncMigrator.Engine
             _count--;
         }
 
-
         private List<RevisionItem> RevisionsToMigrate(WorkItem sourceWorkItem, WorkItem targetWorkItem)
         {
             // just to make sure, we replay the events in the same order as they appeared
             // maybe, the Revisions collection is not sorted according to the actual Revision number
             List<RevisionItem> sortedRevisions = null;
             sortedRevisions = sourceWorkItem.Revisions.Cast<Revision>()
-                    .Select(x => new RevisionItem
-                    {
-                        Index = x.Index,
-                        Number = Convert.ToInt32(x.Fields["System.Rev"].Value),
-                        ChangedDate = Convert.ToDateTime(x.Fields["System.ChangedDate"].Value)
-
-
-                    })
-                    .ToList();
+                .Select(x => new RevisionItem
+                {
+                    Index = x.Index,
+                    Number = Convert.ToInt32(x.Fields["System.Rev"].Value),
+                    ChangedDate = Convert.ToDateTime(x.Fields["System.ChangedDate"].Value)
+                })
+                .ToList();
 
             if (targetWorkItem != null)
             {
@@ -294,11 +282,6 @@ namespace VstsSyncMigrator.Engine
                 sortedRevisions.RemoveRange(0, sortedRevisions.Count - 1);
             }
 
-
-
-
-
-
             TraceWriteLine(sourceWorkItem, $"Found {sortedRevisions.Count} revisions to migrate on  Work item:{sourceWorkItem.Id}", ConsoleColor.Gray, true);
             return sortedRevisions;
         }
@@ -310,17 +293,19 @@ namespace VstsSyncMigrator.Engine
             public DateTime ChangedDate { get; internal set; }
         }
 
-        private WorkItem ReplayRevisions(List<RevisionItem> revisionsToMigrate, WorkItem sourceWorkItem, WorkItem targetWorkItem, Project destProject, WorkItemStoreContext sourceStore,
+        private WorkItem ReplayRevisions(
+            List<RevisionItem> revisionsToMigrate,
+            WorkItem sourceWorkItem,
+            WorkItem targetWorkItem,
+            Project destProject,
+            WorkItemStoreContext sourceStore,
             int current,
             WorkItemStoreContext targetStore)
         {
-
             try
             {
                 var skipToFinalRevisedWorkItemType = _config.SkipToFinalRevisedWorkItemType;
-
                 var last = sourceStore.GetRevision(sourceWorkItem, revisionsToMigrate.Last().Number);
-
                 string finalDestType = last.Type.Name;
 
                 if (skipToFinalRevisedWorkItemType && me.WorkItemTypeDefinitions.ContainsKey(finalDestType))
@@ -346,20 +331,16 @@ namespace VstsSyncMigrator.Engine
                     });
 
                     var fileData = JsonConvert.SerializeObject(data, new JsonSerializerSettings { PreserveReferencesHandling = PreserveReferencesHandling.None });
-                    var filePath = Path.Combine(Path.GetTempPath(), $"{sourceWorkItem.Id}_PreMigrationHistory.json");
-
+                    var filePath = Path.Combine(Path.GetTempPath(), $"full-history.json");
                     File.WriteAllText(filePath, fileData);
-                    targetWorkItem.Attachments.Add(new Attachment(filePath, "History has been consolidated into the attached file."));
-
+                    targetWorkItem.Attachments.Add(new Attachment(filePath));
                     revisionsToMigrate = revisionsToMigrate.GetRange(revisionsToMigrate.Count - 1, 1);
-
                     TraceWriteLine(targetWorkItem, $" Attached a consolidated set of {data.Count()} revisions.");
                 }
 
                 foreach (var revision in revisionsToMigrate)
                 {
                     var currentRevisionWorkItem = sourceStore.GetRevision(sourceWorkItem, revision.Number);
-
                     TraceWriteLine(currentRevisionWorkItem, $" Processing Revision [{revision.Number}]");
 
                     // Decide on WIT
@@ -372,7 +353,6 @@ namespace VstsSyncMigrator.Engine
 
                     //If the work item already exists and its type has changed, update its type. Done this way because there doesn't appear to be a way to do this through the store.
                     if (!skipToFinalRevisedWorkItemType && targetWorkItem.Type.Name != finalDestType)
-
                     {
                         Debug.WriteLine($"Work Item type change! '{targetWorkItem.Title}': From {targetWorkItem.Type.Name} to {destType}");
                         var typePatch = new JsonPatchOperation()
@@ -399,14 +379,11 @@ namespace VstsSyncMigrator.Engine
 
                     targetWorkItem.Fields["System.ChangedBy"].Value =
                         currentRevisionWorkItem.Revisions[revision.Index].Fields["System.ChangedBy"].Value;
-
                     targetWorkItem.Fields["System.History"].Value =
                         currentRevisionWorkItem.Revisions[revision.Index].Fields["System.History"].Value;
                     //Debug.WriteLine("Discussion:" + currentRevisionWorkItem.Revisions[revision.Index].Fields["System.History"].Value);
 
-
                     var fails = targetWorkItem.Validate();
-
                     foreach (Field f in fails)
                     {
                         TraceWriteLine(currentRevisionWorkItem,
@@ -416,7 +393,6 @@ namespace VstsSyncMigrator.Engine
                     targetWorkItem.Save();
                     TraceWriteLine(currentRevisionWorkItem,
                         $" Saved TargetWorkItem {targetWorkItem.Id}. Replayed revision {revision.Number} of {revisionsToMigrate.Count}");
-
                 }
 
                 if (targetWorkItem != null)
@@ -627,7 +603,6 @@ namespace VstsSyncMigrator.Engine
             }
         }
 
-
         private static bool IsNumeric(string val, NumberStyles numberStyle)
         {
             double result;
@@ -677,7 +652,6 @@ namespace VstsSyncMigrator.Engine
             }
         }
 
-
         private void ProcessHTMLFieldAttachements(WorkItem targetWorkItem)
         {
             if (targetWorkItem != null && _config.FixHtmlAttachmentLinks)
@@ -709,6 +683,189 @@ namespace VstsSyncMigrator.Engine
             }
         }
 
+        private void AttachComments(WorkItem source, WorkItem target)
+        {
+            if (source == null || target == null) return;
+            if (!_config.AttachPrettyPrintComments) return;
+            // Gather comments
+            var comments = new List<dynamic>();
+            foreach (Revision revision in source.Revisions)
+            {
+                var text = revision.Fields["System.History"].Value?.ToString();
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    comments.Add(new
+                    {
+                        type = "Comment",
+                        value = text,
+                        revisedBy = revision.Fields["System.ChangedBy"].Value.ToString(),
+                        revisedDate = DateTime.Parse(revision.Fields["System.ChangedDate"].Value.ToString())
+                    });
+                }
+            }
+            if (comments.Count <= 0) return;
+            comments = comments.OrderByDescending(c => c.revisedDate).ToList();
+            // Convert to specified format
+            string filePath = null;
+            byte[] attachment = null;
+            if (_config.CommentAttachmentFormat == "txt")
+            {
+                filePath = Path.Combine(Path.GetTempPath(), "migrated-comments.txt");
+                attachment = ConvertToText(comments);
+            }
+            else if (_config.CommentAttachmentFormat == "html")
+            {
+                filePath = Path.Combine(Path.GetTempPath(), "migrated-comments.html");
+                attachment = ConvertToHtml(comments);
+            }
+            else
+            {
+                filePath = Path.Combine(Path.GetTempPath(), "migrated-comments.json");
+                attachment = ConvertToJson(comments);
+            }
+            File.WriteAllBytes(filePath, attachment);
+            target.Attachments.Add(new Attachment(filePath));
+        }
+
+        private IList<string> _ignoredFields = new List<string>()
+        {
+            "System.AreaId",
+            "System.AreaLevel1",
+            "System.AreaLevel2",
+            "System.AreaLevel3",
+            "System.AuthorizedAs",
+            "System.AuthorizedDate",
+            "System.BoardColumnDone",
+            "System.ChangedBy",
+            "System.ChangedDate",
+            "System.ExternalLinkCount",
+            "System.History",
+            "System.IterationId",
+            "System.IterationLevel1",
+            "System.IterationLevel2",
+            "System.IterationLevel3",
+            "System.PersonId",
+            "System.RelatedLinkCount",
+            "System.Rev",
+            "System.RevisedDate",
+            "System.Watermark",
+            "Microsoft.VSTS.Common.StackRank",
+            "WEF_"
+        };
+
+        private bool ShouldIgnore(string fieldName)
+        {
+            foreach (var identifier in this._ignoredFields)
+            {
+                if (fieldName.StartsWith(identifier))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private void AttachHistory(WorkItem source, WorkItem target)
+        {
+            if (source == null || target == null) return;
+            if (!_config.AttachPrettyPrintHistory) return;
+            // Gather history
+            var history = new List<dynamic>();
+            foreach (Revision revision in source.Revisions)
+            {
+                var changes = new List<string>();
+                foreach (Field field in revision.Fields)
+                {
+                    if (ShouldIgnore(field.ReferenceName))
+                    {
+                        // These fields are unwanted in the output
+                        continue;
+                    }
+                    if (!Object.Equals(field.OriginalValue, field.Value))
+                    {
+                        changes.Add($"Changed '{field.Name}' to '{field.Value.ToString().Trim()}'");
+                    }
+                }
+                if (changes.Count <= 0) continue;
+                history.Add(new
+                {
+                    type = "Revision",
+                    value = string.Join("<br />", changes),
+                    revisedBy = revision.Fields["System.ChangedBy"].Value.ToString(),
+                    revisedDate = DateTime.Parse(revision.Fields["System.ChangedDate"].Value.ToString())
+                });
+            }
+            if (history.Count <= 0) return;
+            history = history.OrderByDescending(c => c.revisedDate).ToList();
+            // Convert to specified format
+            string filePath = null;
+            byte[] attachment = null;
+            if (_config.HistoryAttachmentFormat == "txt")
+            {
+                filePath = Path.Combine(Path.GetTempPath(), "migrated-history.txt");
+                attachment = ConvertToText(history);
+            }
+            else if (_config.HistoryAttachmentFormat == "html")
+            {
+                filePath = Path.Combine(Path.GetTempPath(), "migrated-history.html");
+                attachment = ConvertToHtml(history);
+            }
+            else
+            {
+                filePath = Path.Combine(Path.GetTempPath(), "migrated-history.json");
+                attachment = ConvertToJson(history);
+            }
+            File.WriteAllBytes(filePath, attachment);
+            target.Attachments.Add(new Attachment(filePath));
+        }
+
+        private byte[] ConvertToJson(List<dynamic> items)
+        {
+            return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(items));
+        }
+
+        private byte[] ConvertToText(List<dynamic> items)
+        {
+            var documentBuilder = new StringBuilder();
+            foreach (var item in items)
+            {
+                documentBuilder.AppendLine($"{item.type} by: {item.revisedBy}");
+                if (item.revisedDate.Year < 9999)
+                {
+                    documentBuilder.AppendLine($"{item.type} date: {item.revisedDate}");
+                }
+                string text = Regex.Replace(item.value, "<br */?>", "\n");
+                text = Regex.Replace(text, "&nbsp;", " ");
+                text = Regex.Replace(text, "<[^>]*>", "");
+                documentBuilder.AppendLine(text);
+                documentBuilder.AppendLine();
+            }
+            return Encoding.UTF8.GetBytes(documentBuilder.ToString());
+        }
+
+        private byte[] ConvertToHtml(List<dynamic> items)
+        {
+            var documentBuilder = new StringBuilder();
+            documentBuilder.AppendLine("<table>");
+            foreach (var item in items)
+            {
+                documentBuilder.AppendLine("<tr>");
+                documentBuilder.Append($"<td>{item.type} by: {item.revisedBy}</td>");
+                if (item.revisedDate.Year < 9999)
+                {
+                    documentBuilder.Append($"<td>{item.type} date: {item.revisedDate}</td>");
+                }
+                else
+                {
+                    documentBuilder.Append($"<td></td>");
+                }
+                documentBuilder.Append($"<td>{item.value}</td>");
+                documentBuilder.AppendLine("</tr>");
+            }
+            documentBuilder.AppendLine($"</table>");
+            return Encoding.UTF8.GetBytes(documentBuilder.ToString());
+        }
+
         /// <summary>
         /// Validate the current configuration of the both the migrator and the target project
         /// </summary>
@@ -729,12 +886,7 @@ namespace VstsSyncMigrator.Engine
                 throw new Exception("Running a replay migration requires a ReflectedWorkItemId field to be defined in the target project's process.");
             }
         }
-
-
-
     }
-
-
 
     public class NodeDetecomatic
     {

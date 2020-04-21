@@ -783,7 +783,7 @@ namespace VstsSyncMigrator.Engine
                     }
                     if (!Object.Equals(field.OriginalValue, field.Value))
                     {
-                        changes.Add($"Changed '{field.Name}' to '{field.Value.ToString().Trim()}'");
+                        changes.Add($"Changed '{field.Name}' to '{field.Value?.ToString().Trim()}'");
                     }
                 }
                 if (changes.Count <= 0) continue;
